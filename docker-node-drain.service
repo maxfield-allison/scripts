@@ -1,0 +1,14 @@
+#Systemd service to run node drain script on shutdown or reboot
+[Unit]
+Description=Drain Docker Swarm Node on Shutdown
+After=network.target docker.service network-online.target
+Requires=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStop=/usr/local/bin/swarm-node-drain.sh
+TimeoutStartSec=0
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
