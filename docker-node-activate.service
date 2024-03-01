@@ -1,0 +1,14 @@
+[Unit]
+Description=Activate Docker Swarm Node on Startup
+Wants=network-online.target
+After=network.target docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/swarm-node-activate.sh
+# Ensures the script waits for Docker to be fully operational
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
