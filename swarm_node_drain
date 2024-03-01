@@ -7,7 +7,9 @@ DOCKER_API="10.1.20.220:55443"
 NODE_ID=$(hostname)
 
 # Fetch current node version and role
-read -r NODE_VERSION NODE_ROLE < <(curl -s "$DOCKER_API/nodes/$NODE_ID" | jq -r '.Version.Index, .Spec.Role')
+API_RESPONSE=$(curl -s "$DOCKER_API/nodes/$NODE_ID")
+NODE_VERSION=$(echo "$API_RESPONSE" | jq -r '.Version.Index')
+NODE_ROLE=$(echo "$API_RESPONSE" | jq -r '.Spec.Role')
 
 # Check node version and role successfully retrieved
 if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" == "null" ] || [ -z "$NODE_ROLE" ] || [ "$NODE_ROLE" == "null" ]; then
@@ -18,7 +20,7 @@ fi
 # Construct API endpoint for updating the node
 UPDATE_ENDPOINT="$DOCKER_API/nodes/$NODE_ID/update?version=$NODE_VERSION"
 
-# JSON payload to update the node status. Modify to switch between "drain" and "active"
+# JSON payload to update the node status.
 PAYLOAD="{\"Availability\":\"drain\",\"Role\":\"$NODE_ROLE\"}"
 
 # Execute command to update node
@@ -27,6 +29,9 @@ RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$UPDATE_ENDPOINT" -H 
 # Check for successful response code (200-299)
 if [[ $RESPONSE =~ ^2 ]]; then
     echo "Node $NODE_ID has been successfully updated to 'drain' with role $NODE_ROLE."
+    # Wait 60 seconds for the node to drain containers
+    echo "Waiting 60 seconds for containers to drain."
+    sleep 60
 else
     echo "Failed to update the node: HTTP status $RESPONSE"
     exit 1
