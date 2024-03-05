@@ -1,7 +1,7 @@
 #!/bin/bash
 # Useful for graceful shutdowns and reboots of swarm nodes. Attempt 1 to tackle database corruption issues. Use with systemd service 
 # Set your Docker API endpoint
-DOCKER_API="10.1.20.220:55443"
+DOCKER_API="<YOUR_DOCKER_API_ENDPOINT"
 
 # hostname matches node ID/name in Docker Swarm, otherwise edit
 NODE_ID=$(hostname)
