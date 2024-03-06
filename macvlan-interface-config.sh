@@ -64,8 +64,12 @@ network:
   version: 2
   ethernets:
     macvlan0:
-        addresses:
-          - $MACVLAN_IP
+      addresses:
+        - $MACVLAN_IP
+      dhcp4-overrides:
+        use-routes: false
+
+
 EOF
 
     # Apply Netplan configuration
