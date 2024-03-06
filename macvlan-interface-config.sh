@@ -1,4 +1,7 @@
 #!/bin/bash
+# copy script to /usr/local/bin then 
+# cd /usr/local/bin/ && sudo chmod +x ./macvlan-interface-config.sh && sudo /bin/bash ./macvlan-interface-config.sh <parent_interface> <macvlan_ip>
+
 # This script automates the creation and configuration of a child Macvlan interface on a parent network interface
 # in Ubuntu systems using Netplan. It addresses the Docker Macvlan network limitation that prevents containers on a
 # Macvlan network from connecting back to the host. By creating a child Macvlan interface on the host and configuring
