@@ -52,7 +52,7 @@ qemu-img resize "$IMAGE_NAME" +820M
 
 # Create VM
 echo "Creating VM..."
-qm create 9000 --name "ubuntu-2204-template" --memory 4096 --cores 2 --net0 virtio,bridge=vmbr0,tag=20,firewall=1 --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket --vga serial0 --machine q35 --scsihw virtio-scsi-pci
+qm create 9000 --name "ubuntu-2204-template" --memory 4096 --cores 2 --net0 virtio,bridge=vmbr0,tag=20,firewall=0 qm set 9000 --net1 virtio,bridge=vmbr1,tag=40,firewall=0 qm set 9000 --net2 virtio,bridge=vmbr1,tag=443,firewall=0 qm set 9000 --net3 virtio,bridge=vmbr5,tag=5,firewall=0 --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket --vga serial0 --machine q35 --scsihw virtio-scsi-pci
 
 # Import image to VM and convert to QCOW2 during the import
 echo "Importing image to VM and converting to QCOW2 format..."
