@@ -28,18 +28,14 @@ wget --inet4-only "$IMAGE_URL"
 
 # Customize the image with qemu-guest-agent, timezone, and SSH settings
 echo "Customizing the image..."
-virt-customize -a "$IMAGE_NAME" --install qemu-guest-agent
-virt-customize -a "$IMAGE_NAME" --timezone America/Chicago
-virt-customize -a "$IMAGE_NAME" --run-command 'sed -i "s/^PasswordAuthentication.*/PasswordAuthentication yes/" /etc/ssh/sshd_config'
-virt-customize -a "$IMAGE_NAME" --run-command 'sed -i "s/^#PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config'
-
-# Update and upgrade the image
-echo "Updating and upgrading the image..."
-virt-customize -a "$IMAGE_NAME" --run-command 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && apt-get clean'
-
-# Cleanup the image
-echo "Cleaning up the image..."
-virt-customize -a "$IMAGE_NAME" --run-command 'rm -rf /var/lib/apt/lists/*'
+virt-customize -a "$IMAGE_NAME" \
+    --install qemu-guest-agent,cloud-init \
+    --timezone America/Chicago \
+    --run-command 'sed -i "s/^PasswordAuthentication.*/PasswordAuthentication yes/" /etc/ssh/sshd_config' \
+    --run-command 'sed -i "s/^#PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config' \
+    --run-command 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && apt-get clean' \
+    --run-command 'rm -rf /var/lib/apt/lists/*' \
+    --run-command 'cloud-init clean'
 
 # Resize the image
 echo "Resizing the image..."
@@ -49,10 +45,10 @@ qemu-img resize "$IMAGE_NAME" +820M
 # Create the VM template
 echo "Creating VM template..."
 qm create 9000 --name "ubuntu-2204-template" --memory 4096 --cores 2 \
-    --net0 virtio,bridge=vmbr0,tag=20,firewall=1 \
-    --net1 virtio,bridge=vmbr1,tag=40,firewall=1 \
-    --net2 virtio,bridge=vmbr1,tag=443,firewall=1 \
-    --net3 virtio,bridge=vmbr5,tag=5,firewall=1 \
+    --net0 virtio,bridge=vmbr1,tag=20,firewall=0 \
+    --net1 virtio,bridge=vmbr1,tag=40,firewall=0 \
+    --net2 virtio,bridge=vmbr1,tag=443,firewall=0 \
+    --net3 virtio,bridge=vmbr5,tag=5,firewall=0 \
     --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket \
     --vga serial0 --machine q35 --scsihw virtio-scsi-pci
 
