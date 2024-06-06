@@ -10,6 +10,8 @@ usage() {
     echo "  -i, --image      Specify a custom image URL for the VM template." 
     echo "  -s, --storage    Specify the storage location for the VM template (default: 'local')."
     echo "  -u, --username   Set a custom username for the cloud-init user (default: 'administrator')."
+    echo "  -t, --timezone   Set a timezone (default: 'Europe/London')."
+    echo "  -n, --name       Set the time of the VM (default: 'ubuntu-2204-template')."
     echo "  -h, --help       Display this help message and exit."
     echo ""
     echo "This script creates a Proxmox VM template based on a specified or default Ubuntu Cloud Image."
@@ -21,6 +23,8 @@ CLEAN=0
 STORAGE="local"
 IMAGE_URL="http://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64-disk-kvm.img"
 USERNAME="administrator"
+TIMEZONE="Europe/London"
+NAME="ubuntu-2204-template"
 
 # Parse command line arguments
 while [ "$#" -gt 0 ]; do
@@ -30,6 +34,8 @@ while [ "$#" -gt 0 ]; do
         -i|--image) IMAGE_URL="$2"; shift ;;
         -s|--storage) STORAGE="$2"; shift ;;
         -u|--username) USERNAME="$2"; shift ;;
+        -t|--timezone) TIMEZONE="$2"; shift ;;
+        -n|--name) NAME="$2"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
@@ -64,12 +70,13 @@ fi
 # Resize the image
 echo "Resizing the image..."
 qemu-img resize "$IMAGE_NAME" +5G
+qemu-img resize "$IMAGE_NAME" +820M
 
 # Customize the image with qemu-guest-agent, timezone, and SSH settings
 echo "Customizing the image..."
 virt-customize -a "$IMAGE_NAME" \
     --install qemu-guest-agent,cloud-init \
-    --timezone America/Chicago \
+    --timezone $TIMEZONE \
     --run-command 'sed -i "s/^PasswordAuthentication.*/PasswordAuthentication yes/" /etc/ssh/sshd_config' \
     --run-command 'sed -i "s/^#PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config' \
     --run-command 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && apt-get clean' \
@@ -81,13 +88,11 @@ virt-customize -a "$IMAGE_NAME" \
 
 # Create the VM template
 echo "Creating VM template..."
-qm create 9000 --name "ubuntu-2204-template" --memory 4096 --cores 2 \
-    --net0 virtio,bridge=vmbr1,tag=20,firewall=0 \
-    --net1 virtio,bridge=vmbr1,tag=40,firewall=0 \
-    --net2 virtio,bridge=vmbr1,tag=443,firewall=0 \
-    --net3 virtio,bridge=vmbr5,tag=5,firewall=0 \
+qm create 9000 --name "$NAME" --memory 4096 --cores 2 \
+    --net0 virtio,bridge=vmbr0,firewall=1 \
     --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket \
-    --vga serial0 --machine q35 --scsihw virtio-scsi-pci
+    --vga serial0 --machine q35 --scsihw virtio-scsi-single \
+    --efidisk0 $STORAGE:9000,efitype=4m
 
 # Import the image to VM and convert to QCOW2
 echo "Importing image to VM and converting to QCOW2 format..."
@@ -110,10 +115,11 @@ qm set 9000 --scsi0 "$DISK_NAME"
 echo "Setting boot disk..."
 qm set 9000 --boot c --bootdisk scsi0
 
-# Add cloud-init drive and set user/password
+# Add cloud-init drive
 echo "Adding cloud-init drive..."
-qm set 9000 --ide2 $STORAGE:cloudinit
+qm set 9000 --scsi1 $STORAGE:cloudinit
 
+# Set user/password
 echo "Setting cloud-init user and password..."
 qm set 9000 --ciuser $USERNAME --cipassword $PASSWORD
 
