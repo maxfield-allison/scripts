@@ -5,16 +5,17 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -c, --clean      Force re-download of the Ubuntu image and recreate the VM template."
+    echo "  -c, --clean      Force re-download of the image and recreate the VM template."
     echo "  -p, --pass       Set a custom password for the cloud-init user (default: 'password')."
     echo "  -i, --image      Specify a custom image URL for the VM template." 
     echo "  -s, --storage    Specify the storage location for the VM template (default: 'local')."
     echo "  -u, --username   Set a custom username for the cloud-init user (default: 'administrator')."
     echo "  -t, --timezone   Set a timezone (default: 'Europe/London')."
     echo "  -n, --name       Set the time of the VM (default: 'ubuntu-2204-template')."
+    echo "  -d, --vmid       Set a specific VMID to use in your cluster (default: 9000)."
     echo "  -h, --help       Display this help message and exit."
     echo ""
-    echo "This script creates a Proxmox VM template based on a specified or default Ubuntu Cloud Image."
+    echo "This script creates a Proxmox VM template based on a specified image OR the default Ubuntu 22.04 Cloud Image."
 }
 
 # Default values
@@ -25,6 +26,7 @@ IMAGE_URL="http://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-se
 USERNAME="administrator"
 TIMEZONE="Europe/London"
 NAME="ubuntu-2204-template"
+VMID=9000
 
 # Parse command line arguments
 while [ "$#" -gt 0 ]; do
@@ -36,6 +38,7 @@ while [ "$#" -gt 0 ]; do
         -u|--username) USERNAME="$2"; shift ;;
         -t|--timezone) TIMEZONE="$2"; shift ;;
         -n|--name) NAME="$2"; shift ;;
+        -d|--vmid) VMID=$2; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
@@ -52,7 +55,7 @@ apt update -y && apt install -y nano wget curl libguestfs-tools
 if [ $CLEAN -eq 1 ] || [ ! -f "$IMAGE_NAME" ]; then
     echo "Removing old image and downloading a new one..."
     rm -fv "$IMAGE_NAME"
-    echo "Downloading Ubuntu Cloud Image..."
+    echo "Downloading Image..."
     wget --inet4-only "$IMAGE_URL"
 else
     echo "Image already exists. Skipping download..."
@@ -60,9 +63,9 @@ fi
 
 # Destroy existing VM template if it exists
 echo "Checking for existing VM template..."
-if qm status 9000 >/dev/null 2>&1; then
+if qm status $VMID >/dev/null 2>&1; then
     echo "Destroying existing VM template..."
-    qm destroy 9000 --destroy-unreferenced-disks 1 --purge 1
+    qm destroy $VMID --destroy-unreferenced-disks 1 --purge 1
 else
     echo "No existing VM template found. Proceeding..."
 fi
@@ -88,15 +91,15 @@ virt-customize -a "$IMAGE_NAME" \
 
 # Create the VM template
 echo "Creating VM template..."
-qm create 9000 --name "$NAME" --memory 4096 --cores 2 \
+qm create $VMID --name "$NAME" --memory 4096 --cores 2 \
     --net0 virtio,bridge=vmbr0,firewall=1 \
     --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket \
     --vga serial0 --machine q35 --scsihw virtio-scsi-single \
-    --efidisk0 $STORAGE:9000,efitype=4m
+    --efidisk0 $STORAGE:$VMID,efitype=4m
 
 # Import the image to VM and convert to QCOW2
 echo "Importing image to VM and converting to QCOW2 format..."
-IMPORT_OUTPUT=$(qm importdisk 9000 "$IMAGE_NAME" $STORAGE --format qcow2 2>&1)
+IMPORT_OUTPUT=$(qm importdisk $VMID "$IMAGE_NAME" $STORAGE --format qcow2 2>&1)
 DISK_NAME=$(echo "$IMPORT_OUTPUT" | grep -oP "Successfully imported disk as \'\K[^']+" | sed 's/^unused0://')
 
 # Verify disk name was captured
@@ -109,23 +112,23 @@ fi
 
 # Add the disk to VM
 echo "Adding disk to VM template..."
-qm set 9000 --scsi0 "$DISK_NAME"
+qm set $VMID --scsi0 "$DISK_NAME"
 
 # Set the boot disk
 echo "Setting boot disk..."
-qm set 9000 --boot c --bootdisk scsi0
+qm set $VMID --boot c --bootdisk scsi0
 
 # Add cloud-init drive
 echo "Adding cloud-init drive..."
-qm set 9000 --scsi1 $STORAGE:cloudinit
+qm set $VMID --scsi1 $STORAGE:cloudinit
 
 # Set user/password
 echo "Setting cloud-init user and password..."
-qm set 9000 --ciuser $USERNAME --cipassword $PASSWORD
+qm set $VMID --ciuser $USERNAME --cipassword $PASSWORD
 
 # Convert VM to template
 echo "Converting VM to template..."
-QM_TEMPLATE_OUTPUT=$(qm template 9000 2>&1)
+QM_TEMPLATE_OUTPUT=$(qm template $VMID 2>&1)
 
 # Check for errors and complete
 if echo "$QM_TEMPLATE_OUTPUT" | grep -q "chattr: Operation not supported"; then
