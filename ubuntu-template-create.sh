@@ -13,6 +13,8 @@ usage() {
     echo "  -t, --timezone   Set a timezone (default: 'Europe/London')."
     echo "  -n, --name       Set the time of the VM (default: 'ubuntu-2204-template')."
     echo "  -d, --vmid       Set a specific VMID to use in your cluster (default: 9000)."
+    echo "  -r, --resize     Set a specific size in M to increase the disk image by (default: 5GB+850M for Ubuntu 22.04 image)."
+    echo "                   (if -r or --resize is set to 0 it will NOT increase the disk image)."
     echo "  -h, --help       Display this help message and exit."
     echo ""
     echo "This script creates a Proxmox VM template based on a specified image OR the default Ubuntu 22.04 Cloud Image."
@@ -27,6 +29,7 @@ USERNAME="administrator"
 TIMEZONE="Europe/London"
 NAME="ubuntu-2204-template"
 VMID=9000
+RESIZE=-1
 
 # Parse command line arguments
 while [ "$#" -gt 0 ]; do
@@ -39,6 +42,7 @@ while [ "$#" -gt 0 ]; do
         -t|--timezone) TIMEZONE="$2"; shift ;;
         -n|--name) NAME="$2"; shift ;;
         -d|--vmid) VMID=$2; shift ;;
+        -r|--resize) RESIZE=$2; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
@@ -71,9 +75,16 @@ else
 fi
 
 # Resize the image
-echo "Resizing the image..."
-qemu-img resize "$IMAGE_NAME" +5G
-qemu-img resize "$IMAGE_NAME" +820M
+if [ "$RESIZE" -eq -1 ]; then
+    echo "Resizing the image by the default size of 5GB + 820M..."
+    qemu-img resize "$IMAGE_NAME" +5G
+    qemu-img resize "$IMAGE_NAME" +820M
+elif [ "$RESIZE" -ne 0 ]; then
+    echo "Resizing the image by ${RESIZE}M..."
+    qemu-img resize "$IMAGE_NAME" +${RESIZE}M
+else
+    echo "Not resizing the image at all..."
+fi
 
 # Customize the image with qemu-guest-agent, timezone, and SSH settings
 echo "Customizing the image..."
