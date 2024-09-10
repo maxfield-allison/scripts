@@ -5,51 +5,75 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -c, --clean      Force re-download of the Ubuntu image and recreate the VM template."
-    echo "  -p, --pass       Set a custom password for the cloud-init user (default: 'password')."
+    echo "      --vmid       VM ID for template creation (default 9000)"
+    echo "  -f, --force      Force re-download of the Ubuntu image and recreate the VM template."
+    echo "  -u, --username   Set a custom username for the cloud-init user (default: 'root')."
+    echo "  -p, --pass       Set a custom password for the cloud-init user."
+    echo "  -s, --sshkeys    Set SSH keys for the cloud-init user."
     echo "  -i, --image      Specify a custom image URL for the VM template." 
     echo "  -s, --storage    Specify the storage location for the VM template (default: 'local')."
-    echo "  -u, --username   Set a custom username for the cloud-init user (default: 'administrator')."
-    echo "  -t, --timezone   Set a timezone (default: 'Europe/London')."
-    echo "  -n, --name       Set the time of the VM (default: 'ubuntu-2204-template')."
+    echo "  -d, --disk-size  Specify disk size (default '32G')."
+    echo "  -t, --timezone   Set a timezone (default: 'Europe/Prague')."
+    echo "  -n, --name       Set the time of the VM"
+    echo "  -c, --clean      Remove libguestfs-tools"
     echo "  -h, --help       Display this help message and exit."
     echo ""
     echo "This script creates a Proxmox VM template based on a specified or default Ubuntu Cloud Image."
 }
 
+set -e
+
 # Default values
-PASSWORD="password"
-CLEAN=0
-STORAGE="local"
-IMAGE_URL="http://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64-disk-kvm.img"
+VMID="900"
 USERNAME="administrator"
+PASSWORD="password"
+SSHKEYS=""
+FORCE=0
+STORAGE="local"
+IMAGE_SIZE="32G"
+IMAGE_URL="http://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64-disk-kvm.img"
 TIMEZONE="Europe/London"
-NAME="ubuntu-2204-template"
+NAME=""
+CLEAN=0
 
 # Parse command line arguments
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        -c|--clean) CLEAN=1 ;;
+        -f|--force) FORCE=1 ;;
+        -u|--username) USERNAME="$2"; shift ;;
         -p|--pass) PASSWORD="$2"; shift ;;
+        -k|--sshkeys) SSHKEYS="$2"; shift ;;
         -i|--image) IMAGE_URL="$2"; shift ;;
         -s|--storage) STORAGE="$2"; shift ;;
-        -u|--username) USERNAME="$2"; shift ;;
+        -d|--disk-size) IMAGE_SIZE="$2"; shift ;;
         -t|--timezone) TIMEZONE="$2"; shift ;;
         -n|--name) NAME="$2"; shift ;;
+        -c|--clean) CLEAN=1 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
     shift
 done
 
-IMAGE_NAME=$(basename "$IMAGE_URL")
+IMAGE_NAME=`basename "$IMAGE_URL"`
+
+# Validate inputs
+if [ -z "$PASSWORD" ] && [ -z "$SSHKEYS" ]; then
+    echo "Error: cloud-init password or ssh keys muset be set"
+    exit 1
+fi
+
+# Default template name
+[ -z "$NAME" ] && NAME=`basename "$IMAGE_NAME" .qcow2`
 
 # Update system and install required tools
-echo "Installing required tools..."
-apt update -y && apt install -y nano wget curl libguestfs-tools
+if ! ( [ -x "`command -v vim`" ] && [ -x "`command -v wget`" ] && [ -x "`command -v curl`" ] && [ -x "`command -v virt-customize`" ] ); then
+    echo "Installing required tools..."
+    apt update -y && apt install -y vim wget curl libguestfs-tools
+fi
 
 # Conditionally remove and re-download the image
-if [ $CLEAN -eq 1 ] || [ ! -f "$IMAGE_NAME" ]; then
+if [ $FORCE -eq 1 ] || [ ! -f "$IMAGE_NAME" ]; then
     echo "Removing old image and downloading a new one..."
     rm -fv "$IMAGE_NAME"
     echo "Downloading Ubuntu Cloud Image..."
@@ -59,18 +83,30 @@ else
 fi
 
 # Destroy existing VM template if it exists
-echo "Checking for existing VM template..."
-if qm status 9000 >/dev/null 2>&1; then
-    echo "Destroying existing VM template..."
-    qm destroy 9000 --destroy-unreferenced-disks 1 --purge 1
-else
-    echo "No existing VM template found. Proceeding..."
-fi
+while  qm status $VMID >/dev/null 2>&1; do
+    _destroy=0
+
+    if [ $FORCE -eq 1 ]; then
+        _destroy=1
+    else
+        read -p "Template $VMID already exists, do you want to replace it? y/[n] " _repl
+        if [ -z "$_repl" ] || [ "$_repl" == "n" ]; then
+            read -p "Enter a new template ID: " VMID
+        else
+            _destroy=1
+        fi
+    fi
+
+    if [ $_destroy -eq 1 ]; then
+        echo "Destroying existing VM template..."
+        qm destroy $VMID --destroy-unreferenced-disks 1 --purge 1
+        break
+    fi
+done
 
 # Resize the image
 echo "Resizing the image..."
-qemu-img resize "$IMAGE_NAME" +5G
-qemu-img resize "$IMAGE_NAME" +820M
+qemu-img resize "$IMAGE_NAME" "$IMAGE_SIZE"
 
 # Customize the image with qemu-guest-agent, timezone, and SSH settings
 echo "Customizing the image..."
@@ -88,16 +124,17 @@ virt-customize -a "$IMAGE_NAME" \
 
 # Create the VM template
 echo "Creating VM template..."
-qm create 9000 --name "$NAME" --memory 4096 --cores 2 \
+[ ! -z "$NAME" ] && NAME_OPT="--name"
+qm create $VMID ${NAME:+--name $NAME} --machine q35 --ostype l26 --cpu host \
+    --cores 2 --memory 1024 --balloon 8192 --onboot 1 --agent enabled=1 \
     --net0 virtio,bridge=vmbr0,firewall=1 \
-    --bios ovmf --agent enabled=1 --ostype l26 --serial0 socket \
-    --vga serial0 --machine q35 --scsihw virtio-scsi-single \
-    --efidisk0 $STORAGE:9000,efitype=4m
+    --bios ovmf --efidisk0 "$STORAGE:0,efitype=4m" \
+    --serial0 socket --vga serial0 --scsihw virtio-scsi-single \
 
 # Import the image to VM and convert to QCOW2
-echo "Importing image to VM and converting to QCOW2 format..."
-IMPORT_OUTPUT=$(qm importdisk 9000 "$IMAGE_NAME" $STORAGE --format qcow2 2>&1)
-DISK_NAME=$(echo "$IMPORT_OUTPUT" | grep -oP "Successfully imported disk as \'\K[^']+" | sed 's/^unused0://')
+echo "Importing image into the VM..."
+IMPORT_OUTPUT=`qm importdisk $VMID "$IMAGE_NAME" "$STORAGE" --format qcow2 2>&1`
+DISK_NAME=`echo "$IMPORT_OUTPUT" | grep -oP "Successfully imported disk as \'\K[^']+" | sed 's/^unused0://'`
 
 # Verify disk name was captured
 if [ -z "$DISK_NAME" ]; then
@@ -109,29 +146,39 @@ fi
 
 # Add the disk to VM
 echo "Adding disk to VM template..."
-qm set 9000 --scsi0 "$DISK_NAME"
+qm set $VMID --scsi0 "$DISK_NAME,discard=on,ssd=1"
 
 # Set the boot disk
 echo "Setting boot disk..."
-qm set 9000 --boot c --bootdisk scsi0
+qm set $VMID --boot c --bootdisk scsi0
 
 # Add cloud-init drive
 echo "Adding cloud-init drive..."
-qm set 9000 --scsi1 $STORAGE:cloudinit
+qm set $VMID --scsi1 "$STORAGE:cloudinit"
 
 # Set user/password
 echo "Setting cloud-init user and password..."
-qm set 9000 --ciuser $USERNAME --cipassword $PASSWORD
+if [ ! -f "$SSHKEYS" ]; then
+    echo "$SSHKEYS" > /tmp/sshkeys
+    SSHKEYS=/tmp/sshkeys
+fi
+qm set $VMID --ciuser "$USERNAME" ${PASSWORD:+--cipassword "$PASSWORD"} ${SSHKEYS:+--sshkeys "$SSHKEYS"}
 
 # Convert VM to template
 echo "Converting VM to template..."
-QM_TEMPLATE_OUTPUT=$(qm template 9000 2>&1)
+QM_TEMPLATE_OUTPUT=`qm template $VMID 2>&1`
 
 # Check for errors and complete
 if echo "$QM_TEMPLATE_OUTPUT" | grep -q "chattr: Operation not supported"; then
     echo "Note: 'chattr' operation not supported on this storage. This does not impact the template functionality."
 else
     echo "VM template conversion completed successfully."
+fi
+
+# Remove unneded tools
+if [ $CLEAN -eq 1 ]; then
+    apt-get remove libguestfs-tools
+    apt-get autoremove && apt-get clean
 fi
 
 echo "Template creation script completed."
