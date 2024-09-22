@@ -119,7 +119,8 @@ virt-customize -a "$IMAGE_NAME" \
     --run-command 'rm -rf /var/lib/apt/lists/*' \
     --run-command 'dd if=/dev/zero of=/EMPTY bs=1M || true' \
     --run-command 'rm -f /EMPTY' \
-    --run-command 'cloud-init clean'
+    --run-command 'cloud-init clean' \
+    --truncate '/etc/machine-id'
 
 
 # Create the VM template
