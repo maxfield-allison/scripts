@@ -1,0 +1,13 @@
+[Unit]
+Description=Swarm Node Startup Service
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/swarm-status-control.sh -m startup -a 10.1.20.210 -p 55443
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

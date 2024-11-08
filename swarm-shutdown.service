@@ -1,0 +1,16 @@
+[Unit]
+Description=Swarm Node Shutdown Service
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target docker.service network.target
+Requires=network.target
+Conflicts=shutdown.target reboot.target halt.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/true
+ExecStop=/usr/local/bin/swarm-status-control.sh -m shutdown -a 10.1.20.210 -p 55443
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
