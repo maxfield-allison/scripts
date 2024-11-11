@@ -10,4 +10,4 @@ RemainAfterExit=true
 ExecStop=/usr/local/bin/swarm-status-control.sh -m shutdown -a 10.1.20.210 -p 55443
 
 [Install]
-WantedBy=shutdown.target
+WantedBy=multi-user.target
