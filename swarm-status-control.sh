@@ -9,7 +9,7 @@
 #
 # Compatibility: Ubuntu systems with Docker Swarm.
 #
-# Author: [Your Name]
+# Author: Maxfield Allison
 # Version: 2.2.3
 ###############################################################################
 trap "" SIGPIPE
