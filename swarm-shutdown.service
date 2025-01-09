@@ -1,13 +1,17 @@
 [Unit]
 Description=Swarm Node Shutdown Service
-After=network-online.target docker.service
-Requires=network-online.target docker.service
-After=multi-user.target
+RequiresMountsFor=/mnt/cephfs /mnt/cephfs_nvme
+Requires=network-online.target docker.service rclone-mergerfs.service docker.service rclone-mergerfs.service
+After=docker.service
+Before=shutdown.target
 
 [Service]
 Type=oneshot
-RemainAfterExit=true
-ExecStop=/usr/local/bin/swarm-status-control.sh -m shutdown -a 10.1.20.210 -p 55443
+RemainAfterExit=yes
+ExecStop=/usr/local/bin/swarm-status-control.sh -m shutdown -a 10.1.20.210 -p 55443 -d
+TimeoutStartSec=300
+KillMode=process
+
 
 [Install]
-WantedBy=shutdown.target
+WantedBy=multi-user.target
