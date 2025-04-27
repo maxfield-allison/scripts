@@ -5,15 +5,16 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "      --vmid       VM ID for template creation (default 9000)"
+    echo "  -v, --vmid       VM ID for template creation (default 9000)"
     echo "  -f, --force      Force re-download of the Ubuntu image and recreate the VM template."
     echo "  -u, --username   Set a custom username for the cloud-init user (default: 'root')."
     echo "  -p, --pass       Set a custom password for the cloud-init user."
-    echo "  -s, --sshkeys    Set SSH keys for the cloud-init user."
+    echo "  -k, --sshkeys    Set SSH keys for the cloud-init user."
+    echo "  -4, --ipv4       Force IPv4 on image download."
     echo "  -i, --image      Specify a custom image URL for the VM template."
     echo "  -s, --storage    Specify the storage location for the VM template (default: 'local')."
     echo "  -d, --disk-size  Specify disk size (default '32G')."
-    echo "  -t, --timezone   Set a timezone (default: 'Europe/London')."
+    echo "  -t, --timezone   Set a timezone (default: 'UTC')."
     echo "  -n, --name       Set the time of the VM"
     echo "  -c, --clean      Remove libguestfs-tools"
     echo "  -h, --help       Display this help message and exit."
@@ -31,15 +32,16 @@ SSHKEYS=""
 FORCE=0
 STORAGE="local"
 IMAGE_SIZE="32G"
-IMAGE_URL="http://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64-disk-kvm.img"
-TIMEZONE="Europe/London"
+IMAGE_URL="http://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+TIMEZONE="UTC"
 NAME=""
 CLEAN=0
+IPV4=0
 
 # Parse command line arguments
 while [ "$#" -gt 0 ]; do
     case "$1" in
-           --vmid) VMID="$2"; shift ;;
+        -v|--vmid) VMID="$2"; shift ;;
         -f|--force) FORCE=1 ;;
         -u|--username) USERNAME="$2"; shift ;;
         -p|--pass) PASSWORD="$2"; shift ;;
@@ -50,6 +52,7 @@ while [ "$#" -gt 0 ]; do
         -t|--timezone) TIMEZONE="$2"; shift ;;
         -n|--name) NAME="$2"; shift ;;
         -c|--clean) CLEAN=1 ;;
+        -4|--ipv4) IPV4=1 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
@@ -78,7 +81,7 @@ if [ $FORCE -eq 1 ] || [ ! -f "$IMAGE_NAME" ]; then
     echo "Removing old image and downloading a new one..."
     rm -fv "$IMAGE_NAME"
     echo "Downloading Ubuntu Cloud Image..."
-    wget "$IMAGE_URL"
+    wget ${IPV4:+--inet4-only} "$IMAGE_URL"
 else
     echo "Image already exists. Skipping download..."
 fi
