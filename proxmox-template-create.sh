@@ -7,7 +7,7 @@ usage() {
     echo "Options:"
     echo "  -v, --vmid       VM ID for template creation (default 9000)"
     echo "  -f, --force      Force re-download of the Ubuntu image and recreate the VM template."
-    echo "  -u, --username   Set a custom username for the cloud-init user (default: 'root')."
+    echo "  -u, --username   Set a custom username for the cloud-init user (default: 'administrator')."
     echo "  -p, --pass       Set a custom password for the cloud-init user."
     echo "  -k, --sshkeys    Set SSH keys for the cloud-init user."
     echo "  -4, --ipv4       Force IPv4 on image download."
