@@ -1,5 +1,5 @@
 test
-
+```mermaid
 flowchart TB
     subgraph Internal["Internal Query (LAN)"]
         A1[app.example.com] --> B1[10.0.0.100]
